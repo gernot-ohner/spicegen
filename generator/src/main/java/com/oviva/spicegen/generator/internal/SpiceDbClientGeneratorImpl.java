@@ -2,7 +2,14 @@ package com.oviva.spicegen.generator.internal;
 
 import static com.oviva.spicegen.generator.utils.TextUtils.toPascalCase;
 
-import com.oviva.spicegen.api.*;
+import com.oviva.spicegen.api.CheckBulkPermissionItem;
+import com.oviva.spicegen.api.CheckPermission;
+import com.oviva.spicegen.api.Consistency;
+import com.oviva.spicegen.api.LookupResources;
+import com.oviva.spicegen.api.LookupSubjects;
+import com.oviva.spicegen.api.ObjectRef;
+import com.oviva.spicegen.api.SubjectRef;
+import com.oviva.spicegen.api.UpdateRelationship;
 import com.oviva.spicegen.generator.Options;
 import com.oviva.spicegen.generator.SpiceDbClientGenerator;
 import com.oviva.spicegen.generator.utils.TextUtils;
@@ -161,6 +168,8 @@ public class SpiceDbClientGeneratorImpl implements SpiceDbClientGenerator {
 
       addCheckMethods(typedRefBuilder, definition);
       addBulkCheckMethods(typedRefBuilder, definition);
+      addLookupSubjectsMethods(typedRefBuilder, definition);
+      addLookupResourcesMethods(typedRefBuilder, definition, className);
 
       typedRef = typedRefBuilder.build();
       writeSource(typedRef, ".refs");
@@ -220,6 +229,71 @@ public class SpiceDbClientGeneratorImpl implements SpiceDbClientGenerator {
                   subjectParamName,
                   permission.name(),
                   subjectParamName)
+              .build());
+    }
+  }
+
+  private void addLookupSubjectsMethods(
+      TypeSpec.Builder typeRefBuilder, ObjectDefinition definition) {
+    for (Permission permission : definition.permissions()) {
+
+      var permissionName = TextUtils.toPascalCase(permission.name());
+      var lookupMethod = "lookup" + permissionName + "Subjects";
+
+      var subjectTypeParamName = "subjectType";
+      var consistencyParamName = "consistency";
+
+      typeRefBuilder.addMethod(
+          MethodSpec.methodBuilder(lookupMethod)
+              .addModifiers(Modifier.PUBLIC)
+              .addParameter(String.class, subjectTypeParamName)
+              .addParameter(ClassName.get(Consistency.class), consistencyParamName)
+              .returns(ClassName.get(LookupSubjects.class))
+              .addCode(
+                  """
+                    if ($L == null) {
+                     throw new IllegalArgumentException("subjectType must not be null");
+                    }
+                    return $T.newBuilder().resource(this).permission($S).subjectType($L).consistency($L).build();
+                  """,
+                  subjectTypeParamName,
+                  LookupSubjects.class,
+                  permission.name(),
+                  subjectTypeParamName,
+                  consistencyParamName)
+              .build());
+    }
+  }
+
+  private void addLookupResourcesMethods(
+      TypeSpec.Builder typeRefBuilder, ObjectDefinition definition, String className) {
+    for (Permission permission : definition.permissions()) {
+
+      var permissionName = TextUtils.toPascalCase(permission.name());
+      var lookupMethod = "lookup" + permissionName + "ableBy";
+
+      var subjectParamName = "subject";
+      var consistencyParamName = "consistency";
+
+      typeRefBuilder.addMethod(
+          MethodSpec.methodBuilder(lookupMethod)
+              .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+              .addParameter(ClassName.get(SubjectRef.class), subjectParamName)
+              .addParameter(ClassName.get(Consistency.class), consistencyParamName)
+              .returns(ClassName.get(LookupResources.class))
+              .addCode(
+                  """
+                    if ($L == null) {
+                     throw new IllegalArgumentException("subject must not be null");
+                    }
+                    return $T.newBuilder().resourceType($S).permission($S).subject($L).consistency($L).build();
+                  """,
+                  subjectParamName,
+                  LookupResources.class,
+                  definition.name(),
+                  permission.name(),
+                  subjectParamName,
+                  consistencyParamName)
               .build());
     }
   }

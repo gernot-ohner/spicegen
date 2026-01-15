@@ -127,4 +127,178 @@ class SpiceDbPermissionServiceImplTest {
     assertTrue(got.get(0).permissionGranted());
     assertFalse(got.get(1).permissionGranted());
   }
+
+  @Test
+  void lookupResources() {
+    var stub = mock(PermissionsServiceGrpc.PermissionsServiceBlockingStub.class);
+    var sut = new SpiceDbPermissionServiceImpl(stub, Duration.ofSeconds(3));
+
+    var resourceType = "document";
+    var permission = "read";
+    var consistency = Consistency.fullyConsistent();
+    var subject = SubjectRef.ofObject(ObjectRef.of("user", "alice"));
+
+    var response1 = LookupResourcesResponse.newBuilder().setResourceObjectId("doc1").build();
+    var response2 = LookupResourcesResponse.newBuilder().setResourceObjectId("doc2").build();
+
+    @SuppressWarnings("unchecked")
+    java.util.Iterator<LookupResourcesResponse> responseIterator = mock(java.util.Iterator.class);
+    when(responseIterator.hasNext()).thenReturn(true, true, false);
+    when(responseIterator.next()).thenReturn(response1, response2);
+
+    when(stub.withDeadlineAfter(any(Duration.class))).thenReturn(stub);
+    when(stub.lookupResources(any())).thenReturn(responseIterator);
+
+    // when
+    var got =
+        sut.lookupResources(
+            LookupResources.newBuilder()
+                .resourceType(resourceType)
+                .permission(permission)
+                .subject(subject)
+                .consistency(consistency)
+                .build());
+
+    // then
+    assertEquals(2, got.size());
+    assertEquals(resourceType, got.get(0).kind());
+    assertEquals("doc1", got.get(0).id());
+    assertEquals(resourceType, got.get(1).kind());
+    assertEquals("doc2", got.get(1).id());
+  }
+
+  @Test
+  void lookupResources_empty() {
+    var stub = mock(PermissionsServiceGrpc.PermissionsServiceBlockingStub.class);
+    var sut = new SpiceDbPermissionServiceImpl(stub, Duration.ofSeconds(3));
+
+    @SuppressWarnings("unchecked")
+    java.util.Iterator<LookupResourcesResponse> responseIterator = mock(java.util.Iterator.class);
+    when(responseIterator.hasNext()).thenReturn(false);
+
+    when(stub.withDeadlineAfter(any(Duration.class))).thenReturn(stub);
+    when(stub.lookupResources(any())).thenReturn(responseIterator);
+
+    // when
+    var got =
+        sut.lookupResources(
+            LookupResources.newBuilder()
+                .resourceType("document")
+                .permission("read")
+                .subject(SubjectRef.ofObject(ObjectRef.of("user", "alice")))
+                .consistency(Consistency.fullyConsistent())
+                .build());
+
+    // then
+    assertTrue(got.isEmpty());
+  }
+
+  @Test
+  void lookupSubjects() {
+    var stub = mock(PermissionsServiceGrpc.PermissionsServiceBlockingStub.class);
+    var sut = new SpiceDbPermissionServiceImpl(stub, Duration.ofSeconds(3));
+
+    var resource = ObjectRef.of("document", "doc123");
+    var permission = "read";
+    var subjectType = "user";
+    var consistency = Consistency.fullyConsistent();
+
+    var response1 =
+        LookupSubjectsResponse.newBuilder()
+            .setSubject(ResolvedSubject.newBuilder().setSubjectObjectId("alice"))
+            .build();
+    var response2 =
+        LookupSubjectsResponse.newBuilder()
+            .setSubject(ResolvedSubject.newBuilder().setSubjectObjectId("bob"))
+            .build();
+
+    @SuppressWarnings("unchecked")
+    java.util.Iterator<LookupSubjectsResponse> responseIterator = mock(java.util.Iterator.class);
+    when(responseIterator.hasNext()).thenReturn(true, true, false);
+    when(responseIterator.next()).thenReturn(response1, response2);
+
+    when(stub.withDeadlineAfter(any(Duration.class))).thenReturn(stub);
+    when(stub.lookupSubjects(any())).thenReturn(responseIterator);
+
+    // when
+    var got =
+        sut.lookupSubjects(
+            LookupSubjects.newBuilder()
+                .resource(resource)
+                .permission(permission)
+                .subjectType(subjectType)
+                .consistency(consistency)
+                .build());
+
+    // then
+    assertEquals(2, got.size());
+    assertEquals(subjectType, got.get(0).kind());
+    assertEquals("alice", got.get(0).id());
+    assertEquals(subjectType, got.get(1).kind());
+    assertEquals("bob", got.get(1).id());
+  }
+
+  @Test
+  void lookupSubjects_empty() {
+    var stub = mock(PermissionsServiceGrpc.PermissionsServiceBlockingStub.class);
+    var sut = new SpiceDbPermissionServiceImpl(stub, Duration.ofSeconds(3));
+
+    @SuppressWarnings("unchecked")
+    java.util.Iterator<LookupSubjectsResponse> responseIterator = mock(java.util.Iterator.class);
+    when(responseIterator.hasNext()).thenReturn(false);
+
+    when(stub.withDeadlineAfter(any(Duration.class))).thenReturn(stub);
+    when(stub.lookupSubjects(any())).thenReturn(responseIterator);
+
+    // when
+    var got =
+        sut.lookupSubjects(
+            LookupSubjects.newBuilder()
+                .resource(ObjectRef.of("document", "doc123"))
+                .permission("read")
+                .subjectType("user")
+                .consistency(Consistency.fullyConsistent())
+                .build());
+
+    // then
+    assertTrue(got.isEmpty());
+  }
+
+  @Test
+  void lookupSubjects_withSubjectRelation() {
+    var stub = mock(PermissionsServiceGrpc.PermissionsServiceBlockingStub.class);
+    var sut = new SpiceDbPermissionServiceImpl(stub, Duration.ofSeconds(3));
+
+    var subjectRelation = "member";
+
+    var response1 =
+        LookupSubjectsResponse.newBuilder()
+            .setSubject(ResolvedSubject.newBuilder().setSubjectObjectId("team1"))
+            .build();
+
+    @SuppressWarnings("unchecked")
+    java.util.Iterator<LookupSubjectsResponse> responseIterator = mock(java.util.Iterator.class);
+    when(responseIterator.hasNext()).thenReturn(true, false);
+    when(responseIterator.next()).thenReturn(response1);
+
+    when(stub.withDeadlineAfter(any(Duration.class))).thenReturn(stub);
+    when(stub.lookupSubjects(any())).thenReturn(responseIterator);
+
+    // when
+    var got =
+        sut.lookupSubjects(
+            LookupSubjects.newBuilder()
+                .resource(ObjectRef.of("document", "doc123"))
+                .permission("read")
+                .subjectType("team")
+                .optionalSubjectRelation(subjectRelation)
+                .consistency(Consistency.fullyConsistent())
+                .build());
+
+    // then
+    assertEquals(1, got.size());
+    assertEquals("team", got.get(0).kind());
+    assertEquals("team1", got.get(0).id());
+    assertEquals(subjectRelation, got.get(0).relation());
+  }
 }
