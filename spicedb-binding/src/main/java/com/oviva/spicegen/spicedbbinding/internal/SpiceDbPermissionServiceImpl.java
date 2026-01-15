@@ -23,6 +23,12 @@ public class SpiceDbPermissionServiceImpl implements PermissionService {
   private final CheckPermissionMapper checkPermissionMapper =
       new CheckPermissionMapper(consistencyMapper, objectReferenceMapper, subjectReferenceMapper);
 
+  private final LookupResourcesMapper lookupResourcesMapper =
+      new LookupResourcesMapper(consistencyMapper, subjectReferenceMapper);
+
+  private final LookupSubjectsMapper lookupSubjectsMapper =
+      new LookupSubjectsMapper(consistencyMapper, objectReferenceMapper);
+
   private final PermissionsServiceGrpc.PermissionsServiceBlockingStub permissionsService;
 
   private final GrpcExceptionMapper exceptionMapper = new GrpcExceptionMapper();
@@ -91,6 +97,54 @@ public class SpiceDbPermissionServiceImpl implements PermissionService {
                 == CheckPermissionResponse.Permissionship.PERMISSIONSHIP_HAS_PERMISSION;
         results.add(
             new CheckPermissionsResultImpl(permissionGranted, checkBulkPermissions.items().get(i)));
+      }
+      return results;
+    } catch (StatusRuntimeException e) {
+      throw exceptionMapper.map(e);
+    }
+  }
+
+  @Override
+  public List<ObjectRef> lookupResources(LookupResources lookupResources) {
+    var request = lookupResourcesMapper.map(lookupResources);
+
+    try {
+      var responseIterator =
+          permissionsService.withDeadlineAfter(requestTimeout).lookupResources(request);
+
+      var results = new ArrayList<ObjectRef>();
+      while (responseIterator.hasNext()) {
+        var response = responseIterator.next();
+        results.add(ObjectRef.of(lookupResources.resourceType(), response.getResourceObjectId()));
+      }
+      return results;
+    } catch (StatusRuntimeException e) {
+      throw exceptionMapper.map(e);
+    }
+  }
+
+  @Override
+  public List<SubjectRef> lookupSubjects(LookupSubjects lookupSubjects) {
+    var request = lookupSubjectsMapper.map(lookupSubjects);
+
+    try {
+      var responseIterator =
+          permissionsService.withDeadlineAfter(requestTimeout).lookupSubjects(request);
+
+      var results = new ArrayList<SubjectRef>();
+      while (responseIterator.hasNext()) {
+        var response = responseIterator.next();
+        var resolvedSubject = response.getSubject();
+        var objectRef =
+            ObjectRef.of(lookupSubjects.subjectType(), resolvedSubject.getSubjectObjectId());
+
+        if (lookupSubjects.optionalSubjectRelation() != null
+            && !lookupSubjects.optionalSubjectRelation().isEmpty()) {
+          results.add(
+              SubjectRef.ofObjectWithRelation(objectRef, lookupSubjects.optionalSubjectRelation()));
+        } else {
+          results.add(SubjectRef.ofObject(objectRef));
+        }
       }
       return results;
     } catch (StatusRuntimeException e) {
