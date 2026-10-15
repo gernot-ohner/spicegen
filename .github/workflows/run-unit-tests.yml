@@ -20,7 +20,10 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
       - name: Build and test
-        run: mvn -B verify
+        run: mvn -B install
+      - name: Build and test Gradle plugin
+        working-directory: generator-gradle-plugin
+        run: ./gradlew build
       - name: Sonar Report
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
